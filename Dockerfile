@@ -5,7 +5,7 @@ USER root
 WORKDIR /home/
 
 COPY images ./images
-copy templates ./templates
+COPY templates ./templates
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
 COPY frs.py ./frs.py
 COPY processing.jpg ./processing.jpg
