@@ -1,0 +1,46 @@
+node{
+    stage('Git checkout'){
+        git branch: 'main', url: 'https://github.com/saisakethvemula/face_recognition_cicd.git'
+    }
+    stage('push to ansible server'){
+        sshagent(['ansible-ubuntu']) {
+            sh 'ssh -o StrictHostKeyChecking=no ubuntu@172.31.32.141'
+            sh 'scp /var/lib/jenkins/workspace/frs-pipeline/* ubuntu@172.31.32.141:/home/ubuntu/'
+        }
+    }
+    stage('build dockerimage'){
+        sshagent(['ansible-ubuntu']) {
+            sh 'ssh -o StrictHostKeyChecking=no ubuntu@172.31.32.141 cd /home/ubuntu/'
+            sh 'ssh -o StrictHostKeyChecking=no ubuntu@172.31.32.141 docker image build -t $JOB_NAME:v1.$BUILD_ID .'
+        }
+    }
+    stage('tag dockerimage'){
+        sshagent(['ansible-ubuntu']) {
+            sh 'ssh -o StrictHostKeyChecking=no ubuntu@172.31.32.141 cd /home/ubuntu/'
+            sh 'ssh -o StrictHostKeyChecking=no ubuntu@172.31.32.141 docker image tag $JOB_NAME:v1.$BUILD_ID ccass440/$JOB_NAME:v1.$BUILD_ID'
+            sh 'ssh -o StrictHostKeyChecking=no ubuntu@172.31.32.141 docker image tag $JOB_NAME:v1.$BUILD_ID ccass440/$JOB_NAME:latest'
+        }
+    }
+    stage('update dockerimage in dockerhub'){
+        sshagent(['ansible-ubuntu']) {
+            withCredentials([string(credentialsId: 'dockerhub-pwd', variable: 'dockerpwd')]) {
+                sh "ssh -o StrictHostKeyChecking=no ubuntu@172.31.32.141 docker login -u ccass440 -p ${dockerpwd}"
+                sh 'ssh -o StrictHostKeyChecking=no ubuntu@172.31.32.141 docker image push ccass440/$JOB_NAME:v1.$BUILD_ID'
+                sh 'ssh -o StrictHostKeyChecking=no ubuntu@172.31.32.141 docker image push ccass440/$JOB_NAME:latest'
+            }
+            
+        }
+    }
+    stage('copy files from jenkins to kubernetes server'){
+        sshagent(['kubernetes-machine']) {
+            sh 'ssh -o StrictHostKeyChecking=no ubuntu@172.31.33.87'
+            sh 'scp /var/lib/jenkins/workspace/frs-pipeline/* ubuntu@172.31.33.87:/home/ubuntu/'
+        }
+    }
+    stage('kubernetes deployment using Ansible'){
+        sshagent(['ansible-ubuntu']) {
+            sh 'ssh -o StrictHostKeyChecking=no ubuntu@172.31.32.141 cd /home/ubuntu/'
+            sh 'ssh -o StrictHostKeyChecking=no ubuntu@172.31.32.141 cd ansible-playbook ansible.yaml'
+        }
+    }
+}
